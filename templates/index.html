@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EventLink</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f2f2f2;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        input, select, textarea {
+            margin: 10px;
+            padding: 10px;
+            width: 80%;
+            max-width: 400px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        #providerList {
+            margin-top: 20px;
+        }
+        .provider-card {
+            background: white;
+            margin: 10px auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+            box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+            cursor: pointer;
+        }
+        .hidden {
+            display: none;
+        }
+        #portfolioImages img {
+            width: 100px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="main">
+    <h1>Welcome to EventLink</h1>
+    <button onclick="showCustomerHome()">I'm a Customer</button>
+    <button onclick="showProviderHome()">I'm a Service Provider</button>
+</div>
+
+<div id="customer-home" class="hidden">
+    <h2>Browse Service Providers</h2>
+    <select id="categorySelect">
+        <option value="all">All Categories</option>
+        <option value="Caterer">Caterers</option>
+        <option value="Makeup Artist">Makeup Artists</option>
+        <option value="Decorator">Decorators</option>
+        <option value="Event Hall">Event Halls</option>
+        <option value="Other">Other</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Search providers...">
+    <button onclick="filterProviders()">Search</button>
+    <div id="providerList"></div>
+</div>
+
+<div id="provider-home" class="hidden">
+    <h2>Add Your Service</h2>
+    <form action="/add-service" method="POST" enctype="multipart/form-data">
+        <input type="text" name="name" placeholder="Service Name" required><br>
+        <select name="category" required>
+            <option value="Caterer">Caterer</option>
+            <option value="Makeup Artist">Makeup Artist</option>
+            <option value="Decorator">Decorator</option>
+            <option value="Event Hall">Event Hall</option>
+            <option value="Other">Other</option>
+        </select><br>
+        <input type="file" name="images" multiple accept="image/*"><br>
+        <button type="submit">Submit Service</button>
+    </form>
+    <h3>Incoming Booking Requests</h3>
+    <div id="bookingRequests"></div>
+    <button onclick="backToHome()">Back to Home</button>
+</div>
+
+<div id="profile-page" class="hidden">
+    <button onclick="backToCustomerHome()">← Back</button>
+    <h2 id="profileName"></h2>
+    <p id="profileCategory"></p>
+    <div id="portfolioImages"></div>
+    <h3>Rating: <span id="profileRating"></span> ⭐</h3>
+    <button onclick="showBookingForm()">Book Now</button>
+
+    <div id="bookingForm" class="hidden">
+        <h3>Booking Form</h3>
+        <input id="customerName" type="text" placeholder="Your Name" required><br>
+        <input id="eventDate" type="date" required><br>
+        <input id="eventTime" type="time" required><br>
+        <textarea id="eventMessage" placeholder="Message (optional)"></textarea><br>
+        <button onclick="submitBooking()">Submit Booking</button>
+    </div>
+
+    <h3>Give a Rating:</h3>
+    <div id="ratingStars">
+        <button onclick="rate(1)">⭐</button>
+        <button onclick="rate(2)">⭐⭐</button>
+        <button onclick="rate(3)">⭐⭐⭐</button>
+        <button onclick="rate(4)">⭐⭐⭐⭐</button>
+        <button onclick="rate(5)">⭐⭐⭐⭐⭐</button>
+    </div>
+</div>
+
+<script>
+let providers = [];
+let currentServiceId = null;
+
+function showCustomerHome() {
+    document.getElementById("main").classList.add("hidden");
+    document.getElementById("customer-home").classList.remove("hidden");
+
+    fetch('/get-services')
+        .then(res => res.json())
+        .then(data => {
+            providers = data;
+            displayProviders(providers);
+        });
+}
+
+function showProviderHome() {
+    document.getElementById("main").classList.add("hidden");
+    document.getElementById("provider-home").classList.remove("hidden");
+    loadBookingsForProvider();
+}
+
+function displayProviders(list) {
+    const providerList = document.getElementById("providerList");
+    providerList.innerHTML = "";
+
+    list.forEach((p, index) => {
+        const div = document.createElement("div");
+        div.className = "provider-card";
+        div.innerHTML = `
+            <h3>${p.name}</h3>
+            <p>${p.category}</p>
+            <p>Rating: ${p.rating || "Not Rated"} ⭐</p>
+        `;
+        div.onclick = () => showProfile(index);
+        providerList.appendChild(div);
+    });
+}
+
+function filterProviders() {
+    const search = document.getElementById("searchInput").value.toLowerCase();
+    const category = document.getElementById("categorySelect").value;
+
+    const filtered = providers.filter(p => {
+        return (category === "all" || p.category === category) &&
+               p.name.toLowerCase().includes(search);
+    });
+
+    displayProviders(filtered);
+}
+
+function backToHome() {
+    document.getElementById("provider-home").classList.add("hidden");
+    document.getElementById("main").classList.remove("hidden");
+}
+
+function backToCustomerHome() {
+    document.getElementById("profile-page").classList.add("hidden");
+    document.getElementById("customer-home").classList.remove("hidden");
+}
+
+function showProfile(index) {
+    const provider = providers[index];
+    currentServiceId = provider.id;
+
+    document.getElementById("customer-home").classList.add("hidden");
+    document.getElementById("profile-page").classList.remove("hidden");
+
+    document.getElementById("profileName").innerText = provider.name;
+    document.getElementById("profileCategory").innerText = provider.category;
+    document.getElementById("profileRating").innerText = provider.rating || "Not Rated";
+
+    const portfolio = document.getElementById("portfolioImages");
+    portfolio.innerHTML = "";
+
+    provider.images.forEach(img => {
+        const image = document.createElement("img");
+        image.src = img;
+        portfolio.appendChild(image);
+    });
+}
+
+function showBookingForm() {
+    document.getElementById("bookingForm").classList.toggle("hidden");
+}
+
+function submitBooking() {
+    const booking = {
+        customerName: document.getElementById("customerName").value,
+        eventDate: document.getElementById("eventDate").value,
+        eventTime: document.getElementById("eventTime").value,
+        providerName: document.getElementById("profileName").innerText,
+        message: document.getElementById("eventMessage").value
+    };
+
+    fetch('/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(booking)
+    }).then(res => res.json())
+      .then(data => {
+          alert(data.message);
+      });
+}
+
+function rate(stars) {
+    if (!currentServiceId) {
+        alert("No service selected!");
+        return;
+    }
+
+
+    document.getElementById("profileRating").innerText = "⭐".repeat(stars);
+
+
+    console.log("Sending rating:", stars);
+
+    const rating = {
+        id: currentServiceId,
+        stars: stars,
+        timestamp: new Date().toISOString()
+    };
+
+    fetch('/rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rating)
+    }).then(res => res.json())
+      .then(data => {
+          alert(data.message);
+      });
+}
+
+function loadBookingsForProvider() {
+    const providerName = "ABC Caterers"; // Placeholder, replace with actual name from session
+    fetch('/get-bookings')
+        .then(res => res.json())
+        .then(bookings => {
+            const container = document.getElementById("bookingRequests");
+            container.innerHTML = "";
+            bookings.forEach((b, i) => {
+                if (b.providerName === providerName && b.status === "pending") {
+                    const card = document.createElement("div");
+                    card.innerHTML = `
+                        <p><strong>${b.customerName}</strong> wants to book on ${b.eventDate} at ${b.eventTime}</p>
+                        <button onclick="respondToBooking(${i}, 'accepted')">Accept</button>
+                        <button onclick="respondToBooking(${i}, 'declined')">Decline</button>
+                        <hr/>
+                    `;
+                    container.appendChild(card);
+                }
+            });
+        });
+}
+
+function respondToBooking(index, status) {
+    fetch('/update-booking-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index, status })
+    }).then(res => res.json())
+      .then(data => {
+          alert(data.message);
+          loadBookingsForProvider();
+      });
+}
+</script>
+
+</body>
+</html>
